@@ -31,6 +31,10 @@ export const getAnalysisHistory = async () => {
   return db.analysis_history.orderBy('date').reverse().toArray()
 }
 
+export const deleteAnalysis = async (id) => {
+  return db.analysis_history.delete(id)
+}
+
 export const clearAllLocalData = async () => {
   return Promise.all(db.tables.map(table => table.clear()))
 }

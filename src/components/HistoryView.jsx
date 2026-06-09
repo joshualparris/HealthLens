@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getAnalysisHistory } from '../lib/db.js'
+import { deleteAnalysis, getAnalysisHistory } from '../lib/db.js'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -7,6 +7,7 @@ export default function HistoryView() {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState(null)
+  const [status, setStatus] = useState('')
 
   useEffect(() => {
     getAnalysisHistory().then(data => {
@@ -14,6 +15,29 @@ export default function HistoryView() {
       setLoading(false)
     })
   }, [])
+
+  const downloadHistory = () => {
+    const blob = new Blob([JSON.stringify({
+      app: 'HealthLens',
+      exportedAt: new Date().toISOString(),
+      analyses: history,
+    }, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `healthlens-analysis-history-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    setStatus('Analysis history downloaded.')
+  }
+
+  const removeAnalysis = async (item) => {
+    if (!window.confirm('Delete this saved analysis from this browser?')) return
+    await deleteAnalysis(item.id)
+    setHistory((current) => current.filter((entry) => entry.id !== item.id))
+    setExpandedId((current) => current === item.id ? null : current)
+    setStatus('Saved analysis deleted.')
+  }
 
   if (loading) {
     return <div className="p-8 text-center text-slate-ui animate-pulse">Loading history...</div>
@@ -35,8 +59,19 @@ export default function HistoryView() {
     <div className="space-y-4 animate-slide-up">
       <div className="flex items-center justify-between px-2">
         <h3 className="text-white font-display font-semibold">Saved Analyses</h3>
-        <span className="text-xs text-slate-ui font-mono">{history.length} total</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-ui font-mono">{history.length} total</span>
+          <button
+            type="button"
+            onClick={downloadHistory}
+            className="rounded-lg border border-jade/30 px-3 py-1.5 text-xs font-semibold text-jade transition hover:bg-jade/10"
+          >
+            Download history
+          </button>
+        </div>
       </div>
+
+      {status && <p role="status" className="px-2 text-xs text-jade">{status}</p>}
 
       <div className="space-y-3">
         {history.map((item) => {
@@ -78,6 +113,13 @@ export default function HistoryView() {
                       {item.result}
                     </ReactMarkdown>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => removeAnalysis(item)}
+                    className="mt-4 rounded-lg border border-crimson-health/40 px-3 py-2 text-xs font-semibold text-crimson-health transition hover:bg-crimson-health/10"
+                  >
+                    Delete saved analysis
+                  </button>
                 </div>
               )}
             </div>
