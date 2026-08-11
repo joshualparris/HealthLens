@@ -1,6 +1,11 @@
+import { computeHrvBaselinesFromRows, getLocalDateString } from './health/hrvBaseline.js'
+import JSZip from 'jszip'
+import initSqlJs from 'sql.js'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+
 export async function parseFile(file, onProgress) {
   const ext = file.name.split('.').pop().toLowerCase()
-  const result = { name: file.name, type: ext, size: file.size, content: '', summary: '' }
+  const result = { name: file.name, type: ext, size: file.size, content: '', summary: '', structuredData: {} }
 
   const log = (msg, status = 'info', pct = null, id = null) =>
     onProgress?.({ file: file.name, msg, status, pct, id })
@@ -51,7 +56,9 @@ export async function parseFile(file, onProgress) {
       result.summary = summarisePathology(content, file.name)
       log('Done - PDF markers extracted', 'success', 100)
     } else if (ext === 'zip') {
-      result.content = await parseZIP(file, log)
+      const zipResult = await parseZIP(file, log)
+      result.content = zipResult.content
+      if (zipResult.structuredData) result.structuredData = zipResult.structuredData
       result.summary = truncate(result.content, 16000)
 
       if (file.name.toLowerCase().includes('withings')) {
@@ -64,8 +71,10 @@ export async function parseFile(file, onProgress) {
         log('Processed Health Connect ZIP inventory', 'info', 96)
       }
     } else if (ext === 'db' || ext === 'sqlite') {
-      result.content = await parseSQLite(file, log)
+      const dbResult = await parseSQLite(file, log)
+      result.content = dbResult.content
       result.summary = truncate(result.content, 16000)
+      if (dbResult.structuredData) result.structuredData = dbResult.structuredData
     } else {
       log(`Unsupported file type: ${ext}`, 'warn', 100)
       result.content = `[Binary or unsupported file: ${file.name}]`
@@ -232,11 +241,9 @@ function summariseJSON(text, filename) {
 
 async function parsePDF(file, log) {
   try {
-    log('Loading pdfjs-dist library...', 'info', 2)
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs').catch(() => import('pdfjs-dist'))
-    const version = pdfjsLib.version || '4.4.168'
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`
-
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '4.4.168'}/pdf.worker.min.mjs`
+    }
     log('Library loaded', 'info', 8)
     log('Reading PDF file from disk...', 'info', 10)
     const arrayBuffer = await readArrayBufferWithProgress(file, (p) =>
@@ -274,8 +281,6 @@ async function parsePDF(file, log) {
 
 async function parseZIP(file, log) {
   try {
-    log('Loading JSZip library...', 'info', 2)
-    const JSZip = (await import('jszip')).default
     log('Library loaded', 'info', 5)
 
     log('Reading ZIP file from disk...', 'info', 8)
@@ -294,6 +299,8 @@ async function parseZIP(file, log) {
     let output = `ZIP FILE: ${file.name}\nContents:\n`
     output += fileList.map(f => `  ${f}`).join('\n') + '\n\n'
 
+    let structuredData = {}
+
     const dbCandidates = fileList.filter(f => f.toLowerCase().endsWith('.db') || f.toLowerCase().includes('health_connect'))
     const embeddedDb = dbCandidates.find(f => f.toLowerCase().endsWith('.db')) || dbCandidates[0]
     if (embeddedDb && zip.files[embeddedDb] && !zip.files[embeddedDb].dir) {
@@ -302,7 +309,10 @@ async function parseZIP(file, log) {
         const arrayBuf = await zip.files[embeddedDb].async('arraybuffer')
         const dbFile = new File([arrayBuf], embeddedDb.split('/').pop(), { type: 'application/octet-stream' })
         const dbReport = await parseSQLite(dbFile, log)
-        output += `\n=== Embedded DB: ${embeddedDb} ===\n${dbReport}\n`
+        output += `\n=== Embedded DB: ${embeddedDb} ===\n${dbReport.content || dbReport}\n`
+        if (dbReport.structuredData) {
+          structuredData = { ...structuredData, ...dbReport.structuredData }
+        }
       } catch (e) {
         log(`Could not extract embedded DB ${embeddedDb}: ${e.message}`, 'warn')
         output += `\n=== Embedded DB: ${embeddedDb} could not be extracted ===\n`
@@ -350,7 +360,8 @@ async function parseZIP(file, log) {
     }
 
     log(`Done - extracted ${totalChars.toLocaleString()} chars from ${readable.length} files`, 'success', 100)
-    return output
+    console.error("RETURNING STRUCTURED DATA:", JSON.stringify(structuredData))
+    return { content: output, structuredData }
   } catch (err) {
     log(`ZIP parse failed: ${err.message}`, 'error', 100)
     return `[ZIP parse error for ${file.name}: ${err.message}]`
@@ -376,12 +387,18 @@ async function parseSQLite(file, log) {
   return new Promise((resolve) => {
     let worker
     try {
-      worker = new Worker('/sqlite-worker.js')
+      worker = new Worker(new URL('/src/workers/sqlite-worker.js', import.meta.url), { type: 'module' })
     } catch (err) {
       log(`Worker unavailable: ${err.message}. Falling back to main thread...`, 'warn', 26)
       resolve(parseSQLiteFallback(file, arrayBuffer, log))
       return
     }
+
+    const timeout = setTimeout(() => {
+      worker.terminate()
+      log('SQLite worker timed out. Falling back to main thread...', 'warn', 30)
+      resolve(parseSQLiteFallback(file, arrayBuffer, log))
+    }, 15000)
 
     worker.onmessage = (e) => {
       const msg = e.data
@@ -389,30 +406,32 @@ async function parseSQLite(file, log) {
         log(msg.msg, msg.status, msg.pct, msg.id)
       } else if (msg.type === 'done') {
         worker.terminate()
-        resolve(msg.content)
+        resolve({ content: msg.content, structuredData: msg.structuredData })
       } else if (msg.type === 'error') {
         worker.terminate()
-        log(`SQLite parse failed: ${msg.message}`, 'error', 100)
-        resolve(`[SQLite parse error for ${file.name}: ${msg.message}]`)
+        console.error("WORKER RUNTIME ERROR:", msg.message)
+        log(`SQLite worker failed: ${msg.message}. Falling back to main thread...`, 'warn', 100)
+        resolve(parseSQLiteFallback(file, arrayBuffer, log))
       }
     }
 
     worker.onerror = (err) => {
+      console.error("WORKER LOAD ERROR:", err.message || err)
       worker.terminate()
-      log(`Worker crashed: ${err.message}`, 'error', 100)
-      resolve(`[SQLite worker error for ${file.name}: ${err.message}]`)
+      log(`Worker crashed or failed to load. Falling back to main thread...`, 'warn', 100)
+      resolve(parseSQLiteFallback(file, arrayBuffer, log))
     }
 
-    worker.postMessage({ buffer: arrayBuffer, fileName: file.name, fileSize: file.size }, [arrayBuffer])
+    worker.postMessage({ buffer: arrayBuffer, fileName: file.name, fileSize: file.size })
   })
 }
 
 async function parseSQLiteFallback(file, arrayBuffer, log) {
   try {
     log('Step 2/4 - Loading sql.js library...', 'info', 26)
-    const SQL = (await import('sql.js')).default
+    const SQL = initSqlJs
 
-    const sql = await SQL({ locateFile: () => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.wasm` })
+    const sql = await SQL({ locateFile: () => wasmUrl })
     log('Step 2/4 - WASM loaded', 'info', 45)
 
     log('Step 3/4 - Opening SQLite database...', 'info', 46)
@@ -438,6 +457,7 @@ Tables Found: ${tables.length}
 IMPORTANT: Fallback parser reports schema/counts only. Worker parser gives richer aggregate summaries.
 
 `
+    let structuredData = {}
     for (let i = 0; i < toRead.length; i++) {
       const table = toRead[i]
       const pct = 68 + Math.round((i / Math.max(1, toRead.length)) * 28)
@@ -451,12 +471,34 @@ IMPORTANT: Fallback parser reports schema/counts only. Worker parser gives riche
       } catch (e) {
         output += `TABLE: ${table} - [error: ${e.message}]\n\n`
       }
+      if (table.toLowerCase().includes('hrv') || table.toLowerCase().includes('variability')) {
+        try {
+          const hrvRes = db.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)
+          if (hrvRes.length && hrvRes[0].values.length) {
+            const columns = hrvRes[0].columns
+            const timeIdx = columns.findIndex(c => c.toLowerCase() === 'time' || c.toLowerCase() === 'timestamp')
+            const valIdx = columns.findIndex(c => c.toLowerCase() === 'rmssd' || c.toLowerCase() === 'value')
+            if (timeIdx >= 0 && valIdx >= 0) {
+              const rows = hrvRes[0].values.map(r => {
+                const time = r[timeIdx]
+                const day = typeof time === 'number' ? getLocalDateString(time) : getLocalDateString(new Date(time).getTime())
+                return { time, day, value: r[valIdx] }
+              })
+              const hrvBaselines = computeHrvBaselinesFromRows(rows)
+              if (hrvBaselines) structuredData.hrvBaselines = hrvBaselines
+            }
+          }
+        } catch (e) {
+          console.error("HRV Fallback Error:", e)
+        }
+      }
     }
     db.close()
     const result = truncate(output, 18000)
     log(`Done - ${toRead.length} tables summarised, ${result.length.toLocaleString()} chars extracted`, 'success', 100)
-    return result
+    return { content: result, structuredData }
   } catch (err) {
+    console.error("FALLBACK ERROR:", err.message)
     log(`SQLite parse failed: ${err.message}`, 'error', 100)
     return `[SQLite parse error for ${file.name}: ${err.message}]`
   }

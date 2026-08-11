@@ -4,6 +4,10 @@
 //           { type: 'done', content }
 //           { type: 'error', message }
 
+import { computeHrvBaselinesFromRows, getLocalDateString } from '../lib/health/hrvBaseline.js'
+import initSqlJs from 'sql.js'
+import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
+
 function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
@@ -55,7 +59,7 @@ var METRICS = {
   hrv: {
     label: 'HRV / RMSSD',
     patterns: ['hrv', 'variability', 'rmssd'],
-    values: ['rmssd', 'hrv', 'value'],
+    values: ['rmssd', 'hrv', 'variability_millis', 'millis', 'value'],
     aggregate: 'avg',
   },
   restingHeartRate: {
@@ -293,6 +297,59 @@ function findValueColumn(metricKey, columns) {
   return numeric[0] || null
 }
 
+function computeHrvBaselines(db, table, dateSummary, valueColumn, columns) {
+  if (!dateSummary || !dateSummary.dateExpr || !valueColumn) return null
+  var valCol = quoteIdent(valueColumn.name)
+  
+  var idCol = columns.find(function(c) { return lower(c.name) === 'uuid' || lower(c.name) === 'client_record_id' || lower(c.name) === 'id' })
+  var timeCol = columns.find(function(c) { return lower(c.name) === 'time' || lower(c.name) === 'timestamp' })
+  
+  var selectCols = []
+  if (idCol) selectCols.push(quoteIdent(idCol.name) + ' AS id')
+  else selectCols.push('NULL AS id')
+  
+  if (timeCol) selectCols.push(quoteIdent(timeCol.name) + ' AS time')
+  else selectCols.push('NULL AS time')
+  
+  selectCols.push(valCol + ' AS value')
+  
+  try {
+    var res = db.exec(
+      'SELECT ' + selectCols.join(', ') + ' FROM ' + quoteIdent(table) +
+      ' WHERE ' + valCol + ' IS NOT NULL'
+    )
+    if (!res[0] || !res[0].values.length) return null
+
+    var formattedRows = []
+    res[0].values.forEach(function(row) {
+      var id = row[0]
+      var time = row[1]
+      var value = row[2]
+      
+      // Use Australia/Sydney local date if time exists
+      var day = null
+      if (typeof time === 'number') {
+        // Health connect times are in ms
+        day = getLocalDateString(time)
+      } else if (typeof time === 'string') {
+        day = getLocalDateString(new Date(time).getTime())
+      }
+      
+      formattedRows.push({
+        id: id,
+        time: time,
+        day: day,
+        value: value
+      })
+    })
+
+    return computeHrvBaselinesFromRows(formattedRows)
+  } catch(e) {
+    console.error('HRV Baseline Error:', e)
+    return null
+  }
+}
+
 function getDailyAggregate(db, table, metricKey, dateSummary, valueColumn) {
   if (!dateSummary || !dateSummary.dateExpr || !valueColumn) return null
   var def = METRICS[metricKey] || { aggregate: 'avg' }
@@ -350,9 +407,8 @@ self.onmessage = async function(e) {
     }, 180)
 
     var startWasm = Date.now()
-    importScripts('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.js')
     var sql = await initSqlJs({
-      locateFile: function() { return 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.wasm' }
+      locateFile: function() { return wasmUrl }
     })
 
     clearInterval(wasmTimer)
@@ -426,6 +482,7 @@ self.onmessage = async function(e) {
           sources: sources,
           numericStats: numericStats,
           dailyAggregate: dailyAggregate,
+          hrvBaselines: (metricKey === 'hrv' && count > 0) ? computeHrvBaselines(db, table, dateSummary, valueColumn, columns) : null,
           warnings: tableWarnings,
         }
         summaries.push(summary)
@@ -495,8 +552,20 @@ self.onmessage = async function(e) {
             }
           }
           if (s.sources && s.sources.length) report += '  Source hints: ' + s.sources.join(', ') + '\n'
-          if (s.dailyAggregate) {
+          if (s.dailyAggregate && !s.hrvBaselines) {
             report += '  Recent daily aggregate: ' + s.dailyAggregate.method + '(' + s.dailyAggregate.column + ') over ' + s.dailyAggregate.recentDays + ' recent days; latest ' + s.dailyAggregate.latestDay + '=' + round(s.dailyAggregate.latestValue, 1) + '; recent avg=' + round(s.dailyAggregate.averageRecentValue, 1) + '\n'
+          }
+          if (s.hrvBaselines) {
+            var hb = s.hrvBaselines
+            report += '  HRV Baselines (Calculated locally via daily medians):\n'
+            report += '    - Latest Day: ' + hb.latestDay + ' (Median RMSSD: ' + round(hb.latestMedian, 1) + ', ' + hb.latestSampleCount + ' samples)\n'
+            report += '    - 7-Day Window: Median ' + round(hb.median7, 1) + ', CV ' + (hb.cv7 ? round(hb.cv7*100, 1)+'%' : 'n/a') + ' (' + hb.validDays7 + '/7 valid days)\n'
+            report += '    - 28-Day Baseline: ' + (hb.median28 ? 'Median ' + round(hb.median28, 1) + ' (' + hb.validDays28 + '/28 valid days)' : 'Insufficient data') + '\n'
+            if (hb.pctDiff !== null) {
+              report += '    - Difference from 28-day baseline: ' + (hb.pctDiff > 0 ? '+' : '') + round(hb.pctDiff, 1) + '%\n'
+            }
+            report += '    - Cautious Label: ' + hb.label + '\n'
+            report += '    - Data Confidence: ' + hb.confidence + '\n'
           }
           if (s.numericStats && s.numericStats.length) {
             report += '  Numeric summaries: ' + s.numericStats.slice(0, 4).map(function(stat) {
@@ -516,7 +585,11 @@ self.onmessage = async function(e) {
     report += '- Raw sample rows are intentionally not included to avoid sending binary/noisy personal data to the AI.\n'
 
     log('Done - structured health inventory complete', 'success', 100)
-    self.postMessage({ type: 'done', content: report })
+    
+    var hrvData = summaries.find(function(s) { return s.hrvBaselines })
+    var structuredData = hrvData ? { hrvBaselines: hrvData.hrvBaselines } : {}
+
+    self.postMessage({ type: 'done', content: report, structuredData: structuredData })
   } catch (err) {
     log('Audit failed: ' + err.message, 'error', 100)
     self.postMessage({ type: 'error', message: err.message })

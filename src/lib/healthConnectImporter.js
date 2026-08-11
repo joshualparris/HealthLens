@@ -33,7 +33,8 @@ export async function importHealthConnectFile(file, onProgress = () => {}) {
 
   // Heuristics: look for step, heart, sleep related tables
   const stepTables = tables.filter(t => /step|steps/i.test(t))
-  const hrTables = tables.filter(t => /heart|hr|pulse/i.test(t))
+  const hrTables = tables.filter(t => /heart|hr|pulse/i.test(t) && !/variability|rmssd/i.test(t))
+  const hrvTables = tables.filter(t => /heart_rate_variability|rmssd/i.test(t))
   const sleepTables = tables.filter(t => /sleep/i.test(t))
 
   // Aggregate steps per day (best-effort)
@@ -107,6 +108,41 @@ export async function importHealthConnectFile(file, onProgress = () => {}) {
         })
       } catch (e) {
         console.warn('HR table parse failed', t, e.message)
+      }
+    }
+  }
+
+  // Heart Rate Variability (HRV RMSSD)
+  if (hrvTables.length) {
+    for (const t of hrvTables) {
+      try {
+        const qr = dbSql.exec(`SELECT * FROM "${t}" LIMIT 2000`)
+        if (!qr.length) continue
+        const cols = qr[0].columns
+        const rows = qr[0].values
+        const tsCol = cols.find(c => /time|timestamp|start/i.test(c))
+        const valCol = cols.find(c => /variability|rmssd|millis/i.test(c))
+        if (!tsCol || !valCol) continue
+        const ti = cols.indexOf(tsCol)
+        const vi = cols.indexOf(valCol)
+        const byDay = {}
+        rows.forEach(r => {
+          const ts = r[ti]
+          let d = null
+          if (typeof ts === 'number' && String(ts).length > 10) d = new Date(Number(ts)).toISOString().slice(0,10)
+          else if (typeof ts === 'number') d = new Date(Number(ts)*1000).toISOString().slice(0,10)
+          else d = new Date(String(ts)).toISOString().slice(0,10)
+          const v = Number(r[vi]) || null
+          if (!v) return
+          byDay[d] = byDay[d] || { sum:0, count:0 }
+          byDay[d].sum += v; byDay[d].count += 1
+        })
+        Object.entries(byDay).forEach(([date, obj]) => {
+          const avg = Math.round(obj.sum / obj.count)
+          heartMetrics.push({ timestamp_or_date: date, metric_type: 'hrv_rmssd', value: avg, unit: 'ms', source_id: sourceId, import_id: importId, raw_json: JSON.stringify({ table: t }) })
+        })
+      } catch (e) {
+        console.warn('HRV table parse failed', t, e.message)
       }
     }
   }

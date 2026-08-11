@@ -349,7 +349,11 @@ export default function App() {
               />
             )}
 
-            {stage === STAGES.UPLOAD && !isSupabaseConfigured && (
+            {stage === STAGES.UPLOAD && !isSupabaseConfigured && !parsedFiles.length && (
+              <Dashboard parsedFiles={parsedFiles} />
+            )}
+
+            {(stage === STAGES.ANALYSE || stage === STAGES.RESULT) && parsedFiles.length > 0 && (
               <Dashboard parsedFiles={parsedFiles} />
             )}
 

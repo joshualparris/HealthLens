@@ -6,3 +6,8 @@ dist/
 *.log
 test-results/
 playwright-report/
+*.db
+*.zip
+build/
+.last-run.json
+coverage/

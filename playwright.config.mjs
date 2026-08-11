@@ -12,7 +12,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     env: {
       VITE_SUPABASE_URL: 'https://example.supabase.co',
-      VITE_SUPABASE_PUBLISHABLE_KEY: 'test-anon-key',
+      VITE_SUPABASE_ANON_KEY: 'test-key'
     },
   },
   use: {
