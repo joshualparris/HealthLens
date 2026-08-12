@@ -10,10 +10,10 @@ export const PROVIDERS = [
     label: 'Groq (Fastest)',
     badge: 'Free tier',
     badgeClass: 'text-jade',
-    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    endpoint: '/api/groq/proxy',
     keyUrl: 'https://console.groq.com/keys',
-    placeholder: 'gsk_...',
-    note: 'Fast Llama models with a generous free tier.',
+    placeholder: 'Configured on server',
+    note: 'Fast Llama models. Securely proxied via backend.',
     defaultModel: 'llama-3.3-70b-versatile',
     models: [
       { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (recommended)' },
@@ -22,7 +22,6 @@ export const PROVIDERS = [
     ],
     headers: (key) => ({
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`,
     }),
     body: (model, system, messages, stream = true) => ({
       model,

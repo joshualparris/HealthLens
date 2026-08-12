@@ -4,7 +4,7 @@ import { buildSupabaseDataPack, isSupabaseConfigured } from './healthDataApi.js'
 import { getAnalysisHistory } from './db.js'
 
 const ENDPOINTS = {
-  groq: 'https://api.groq.com/openai/v1/chat/completions',
+  groq: '/api/groq/proxy',
   openrouter: 'https://openrouter.ai/api/v1/chat/completions',
   anthropic: 'https://api.anthropic.com/v1/messages'
 }

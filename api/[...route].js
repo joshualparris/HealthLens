@@ -10,6 +10,7 @@ import stravaStatus from '../src/apiHandlers/strava-status.js'
 import stravaWebhook from '../src/apiHandlers/strava-webhook.js'
 import withingsCallback from '../src/apiHandlers/withings-callback.js'
 import withingsStart from '../src/apiHandlers/withings-start.js'
+import groqProxy from '../src/apiHandlers/groq-proxy.js'
 
 const routeMap = new Map([
   ['admin/self-test', adminSelfTest],
@@ -24,6 +25,7 @@ const routeMap = new Map([
   ['strava/webhook', stravaWebhook],
   ['withings/start', withingsStart],
   ['withings/callback', withingsCallback],
+  ['groq/proxy', groqProxy],
 ])
 
 function normalizePath(req) {

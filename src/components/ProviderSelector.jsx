@@ -7,9 +7,9 @@ const PROVIDERS = [
     name: 'Groq',
     badge: 'Free tier',
     badgeClass: 'text-jade',
-    placeholder: 'gsk_...',
+    placeholder: 'Configured securely on server',
     keyUrl: 'https://console.groq.com/keys',
-    note: 'Free tier available with fast Llama models.',
+    note: 'Securely proxied via backend.',
     models: [
       { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (recommended)' },
       { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (fastest)' },
@@ -65,9 +65,9 @@ export default function ProviderSelector({ onSubmit }) {
   }
 
   const validate = (k) => {
+    if (provider.id === 'groq') return '' // No key needed for groq on client side
     if (!k.trim()) return 'Please enter your API key.'
     if (provider.id === 'anthropic' && !k.startsWith('sk-ant-')) return 'Anthropic keys start with sk-ant-'
-    if (provider.id === 'groq' && !k.startsWith('gsk_')) return 'Groq keys start with gsk_'
     if (provider.id === 'openrouter' && !k.startsWith('sk-or-')) return 'OpenRouter keys start with sk-or-'
     return ''
   }
@@ -153,45 +153,53 @@ export default function ProviderSelector({ onSubmit }) {
             </select>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs text-slate-ui font-medium uppercase tracking-wider">API Key</label>
-            <div className="relative">
-              <input
-                type={show ? 'text' : 'password'}
-                value={key}
-                onChange={e => {
-                  setKey(e.target.value)
-                  setError('')
-                  setTestResult(null)
-                }}
-                placeholder={provider.placeholder}
-                className="w-full bg-ink border border-slate-border focus:border-jade/60 rounded-xl px-4 py-3 text-white font-mono text-sm outline-none transition-colors pr-12 placeholder:text-slate-border"
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                onClick={() => setShow(s => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-ui hover:text-white text-xs transition-colors"
-              >
-                {show ? 'hide' : 'show'}
-              </button>
+          {provider.id !== 'groq' ? (
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-ui font-medium uppercase tracking-wider">API Key</label>
+              <div className="relative">
+                <input
+                  type={show ? 'text' : 'password'}
+                  value={key}
+                  onChange={e => {
+                    setKey(e.target.value)
+                    setError('')
+                    setTestResult(null)
+                  }}
+                  placeholder={provider.placeholder}
+                  className="w-full bg-ink border border-slate-border focus:border-jade/60 rounded-xl px-4 py-3 text-white font-mono text-sm outline-none transition-colors pr-12 placeholder:text-slate-border"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-ui hover:text-white text-xs transition-colors"
+                >
+                  {show ? 'hide' : 'show'}
+                </button>
+              </div>
+              {error && <p className="text-xs text-crimson-health whitespace-pre-wrap">{error}</p>}
+              {testResult?.ok && <p className="text-xs text-jade">{testResult.message || 'Connection successful.'}</p>}
             </div>
-            {error && <p className="text-xs text-crimson-health whitespace-pre-wrap">{error}</p>}
-            {testResult?.ok && <p className="text-xs text-jade">{testResult.message || 'Connection successful.'}</p>}
-          </div>
+          ) : (
+            <div className="space-y-1.5">
+              <p className="text-sm text-jade bg-jade/10 rounded-xl px-4 py-3 border border-jade/20">Groq is securely configured via backend proxy. No local API key required.</p>
+              {error && <p className="text-xs text-crimson-health whitespace-pre-wrap">{error}</p>}
+              {testResult?.ok && <p className="text-xs text-jade">{testResult.message || 'Connection successful.'}</p>}
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button
               type="button"
               onClick={handleTest}
-              disabled={!key.trim() || testing}
+              disabled={(provider.id !== 'groq' && !key.trim()) || testing}
               className="flex-1 bg-ink border border-slate-border hover:border-slate-ui text-white font-medium py-3 rounded-xl transition-colors text-sm disabled:opacity-40"
             >
               {testing ? 'Testing...' : 'Test Connection'}
             </button>
             <button
               type="submit"
-              disabled={!key.trim() || testing}
+              disabled={(provider.id !== 'groq' && !key.trim()) || testing}
               className="flex-[2] bg-jade hover:bg-jade-dark disabled:opacity-40 disabled:cursor-not-allowed text-ink-DEFAULT font-display font-semibold py-3 rounded-xl transition-colors text-sm"
             >
               Continue
