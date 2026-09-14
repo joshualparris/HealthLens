@@ -4,6 +4,15 @@ A personal health data analysis app powered by Groq, OpenRouter, or Anthropic. U
 
 > ⚕️ **Not medical advice** — for personal reflection only.
 
+## Related health apps
+
+HealthLens is the **private personal-data** part of a wider health toolkit:
+
+- **Health Reference / ColdFluApp** — evidence, first aid, family health, medicines, learning resources and quizzes: <https://github.com/joshualparris/ColdFluApp>
+- **HeartCalm** — in-the-moment calm/palpitation support, structured episode logging and escalation guardrails: <https://github.com/joshuaparris-max/HeartCalm> · <https://heart-calm-vert.vercel.app>
+
+Keep the boundary clear: reviewed public health education belongs in Health Reference; personal measurements and uploaded records belong here. Cross-linking does not imply automatic transfer of health data.
+
 ## Features
 
 - **Upload anything**: CSV, PDF, JSON, ZIP archives, SQLite .db (Health Connect), plain text
