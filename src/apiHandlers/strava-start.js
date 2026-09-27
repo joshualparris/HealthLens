@@ -1,3 +1,5 @@
+import { beginOAuthState } from '../apiLib/oauthState.js'
+
 function getBaseUrl(req) {
   const fromEnv = process.env.BASE_URL || process.env.HEALTHLENS_APP_URL
   if (fromEnv) return fromEnv.replace(/\/$/, '')
@@ -8,13 +10,16 @@ function getBaseUrl(req) {
 export default function handler(req, res) {
   const clientId = process.env.STRAVA_CLIENT_ID
   if (!clientId) {
-    res.status(500).send('Missing STRAVA_CLIENT_ID')
+    res.status(500).send('Missing Strava configuration')
     return
   }
 
   const redirectUri = process.env.STRAVA_REDIRECT_URI || `${getBaseUrl(req)}/api/strava/callback`
   const scopes = process.env.STRAVA_SCOPES || 'read,activity:read'
-  const state = req.query?.state || 'healthlens'
+  const requestedIntent = req.query?.intent || req.query?.state
+  const intent = requestedIntent === 'backfill90' ? 'backfill90' : ''
+  const state = beginOAuthState('strava', req, res, { intent })
+
   const url = new URL('https://www.strava.com/oauth/authorize')
   url.searchParams.set('client_id', clientId)
   url.searchParams.set('redirect_uri', redirectUri)
