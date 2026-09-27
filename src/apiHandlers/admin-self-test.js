@@ -1,11 +1,5 @@
 import supabaseAdmin from '../apiLib/supabaseServer.js'
-
-function getAuthToken(req) {
-  const auth = req.headers['authorization'] || req.headers['Authorization']
-  if (!auth || typeof auth !== 'string') return null
-  const match = auth.match(/^Bearer\s+(.+)$/i)
-  return match ? match[1].trim() : null
-}
+import { requireBearerSecret } from '../apiLib/apiAuth.js'
 
 function buildResponse() {
   return {
@@ -43,17 +37,8 @@ async function runAdminSelfTest(req, res, { supabaseClient, env }) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const adminSecret = env.HEALTHLENS_SYNC_SECRET
-  if (!adminSecret) {
-    return res.status(500).json({ error: 'Server misconfigured: missing HEALTHLENS_SYNC_SECRET' })
-  }
-
-  const token = getAuthToken(req)
-  if (!token) {
-    return res.status(401).json({ error: 'Missing Authorization header' })
-  }
-  if (token !== adminSecret) {
-    return res.status(403).json({ error: 'Invalid admin token' })
+  if (!requireBearerSecret(req, res, env.HEALTHLENS_SYNC_SECRET, 'HEALTHLENS_SYNC_SECRET')) {
+    return
   }
 
   const result = buildResponse()
