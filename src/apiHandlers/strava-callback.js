@@ -5,6 +5,7 @@ import {
   storeStravaToken,
   upsertStravaActivityToSupabase,
 } from '../apiLib/stravaClient.js'
+import { consumeOAuthState } from '../apiLib/oauthState.js'
 
 function appRedirect(status, details = {}) {
   const base = (process.env.BASE_URL || process.env.HEALTHLENS_APP_URL || 'https://health-lens-rust.vercel.app').replace(/\/$/, '')
@@ -38,8 +39,14 @@ async function backfillLast90Days(accountId) {
 
 export default async function handler(req, res) {
   const { code, error, scope, state } = req.query || {}
+  const oauth = consumeOAuthState('strava', req, res, state)
+
+  if (!oauth.valid) {
+    res.status(400).send('Invalid OAuth state')
+    return
+  }
   if (error) {
-    res.writeHead(302, { Location: appRedirect('denied', { reason: error }) })
+    res.writeHead(302, { Location: appRedirect('denied') })
     res.end()
     return
   }
@@ -53,19 +60,17 @@ export default async function handler(req, res) {
     const tokenRow = await storeStravaToken(tokenData, { env: process.env, scope })
     let backfilled = null
 
-    if (String(state || '').toLowerCase().includes('backfill90')) {
+    if (oauth.intent === 'backfill90') {
       backfilled = await backfillLast90Days(tokenRow.account_id)
     }
 
     res.writeHead(302, {
-      Location: appRedirect('connected', {
-        account: tokenRow.account_id,
-        backfilled,
-      }),
+      Location: appRedirect('connected', { backfilled }),
     })
     res.end()
   } catch (err) {
-    res.writeHead(302, { Location: appRedirect('error', { reason: err.message }) })
+    console.error('Strava OAuth callback failed:', err?.message || 'unknown error')
+    res.writeHead(302, { Location: appRedirect('error') })
     res.end()
   }
 }
