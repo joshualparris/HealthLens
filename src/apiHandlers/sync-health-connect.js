@@ -1,4 +1,5 @@
 import supabaseAdmin from '../apiLib/supabaseServer.js'
+import { requireBearerSecret } from '../apiLib/apiAuth.js'
 
 function validatePayload(body) {
   if (!body || typeof body !== 'object') return 'Invalid JSON body'
@@ -48,13 +49,7 @@ export function createSyncHandler({ supabaseClient = supabaseAdmin, env = proces
     try {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-      const auth = req.headers['authorization'] || req.headers['Authorization']
-      const secret = env.HEALTHLENS_SYNC_SECRET
-      if (!secret) return res.status(500).json({ error: 'Server misconfigured: missing HEALTHLENS_SYNC_SECRET' })
-      if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Missing Authorization header' })
-
-      const token = auth.split(' ')[1]
-      if (token !== secret) return res.status(403).json({ error: 'Invalid sync token' })
+      if (!requireBearerSecret(req, res, env.HEALTHLENS_SYNC_SECRET, 'HEALTHLENS_SYNC_SECRET')) return
 
       const body = req.body
       const err = validatePayload(body)
@@ -169,7 +164,7 @@ export function createSyncHandler({ supabaseClient = supabaseAdmin, env = proces
       return res.status(200).json({ ok: true, importId, recordsReceived: summaries.length, warnings: [] })
     } catch (e) {
       console.error('Sync handler error', e.message)
-      return res.status(500).json({ error: e.message })
+      return res.status(500).json({ error: 'Sync failed' })
     }
   }
 }
