@@ -30,13 +30,19 @@ async function refreshTokenRow(row) {
     refresh_token: data.refresh_token || row.refresh_token,
     expires_at: expiresAt,
     scope: data.scope || row.scope,
-    raw_response: data
+    raw_response: {
+      token_type: data.token_type || null,
+      expires_in: data.expires_in || null,
+      scope: data.scope || row.scope || null,
+      user_id: data.user_id || row.account_id || null,
+    }
   }
   await supabaseAdmin.from('oauth_tokens').update(update).match({ id: row.id })
   return { ...row, ...update }
 }
 
 export async function getAccessTokenForAccount(accountId) {
+  if (!supabaseAdmin) throw new Error('Secure token storage is unavailable')
   const { data, error } = await supabaseAdmin.from('oauth_tokens').select('*').eq('provider', 'fitbit').eq('account_id', accountId).limit(1).single()
   if (error) throw error
   let row = data
