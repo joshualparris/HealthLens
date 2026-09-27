@@ -88,6 +88,31 @@ export function createStravaWebhookHandler({ supabaseClient = supabaseAdmin, env
     }
 
     const event = normalizeEvent(req.body || {})
+    const expectedSubscriptionId = env.STRAVA_SUBSCRIPTION_ID
+    if (!expectedSubscriptionId) {
+      return res.status(503).json({ error: 'Strava webhook is not securely configured' })
+    }
+    if (!event.subscription_id || event.subscription_id !== String(expectedSubscriptionId)) {
+      return res.status(403).json({ error: 'Invalid Strava subscription' })
+    }
+    if (!event.owner_id) {
+      return res.status(400).json({ error: 'Missing Strava owner' })
+    }
+
+    const { data: ownerRows, error: ownerError } = await supabaseClient
+      .from('oauth_tokens')
+      .select('account_id')
+      .eq('provider', 'strava')
+      .eq('account_id', event.owner_id)
+      .limit(1)
+    if (ownerError) {
+      console.error('Strava webhook owner validation failed')
+      return res.status(500).json({ error: 'Webhook validation failed' })
+    }
+    if (!ownerRows?.length) {
+      return res.status(403).json({ error: 'Unknown Strava owner' })
+    }
+
     let row
     try {
       row = await storeWebhookEvent(event, supabaseClient)
@@ -105,7 +130,7 @@ export function createStravaWebhookHandler({ supabaseClient = supabaseAdmin, env
       return res.status(200).json({ ok: true, stored: true, processed: true })
     } catch (err) {
       await markWebhookProcessed(row, supabaseClient, { processed: false, error: err.message })
-      return res.status(200).json({ ok: true, stored: true, processed: false, warning: err.message })
+      return res.status(200).json({ ok: true, stored: true, processed: false, warning: 'Processing deferred' })
     }
   }
 }
