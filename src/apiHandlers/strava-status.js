@@ -1,4 +1,5 @@
 import supabaseAdmin from '../apiLib/supabaseServer.js'
+import { requireBearerSecret } from '../apiLib/apiAuth.js'
 
 function startOfWindow(days) {
   return new Date(Date.now() - Number(days || 90) * 24 * 60 * 60 * 1000).toISOString()
@@ -61,10 +62,6 @@ export async function createStravaStatus({ supabaseClient = supabaseAdmin, env =
   return {
     ...summarizeActivities(activities || []),
     connected: Boolean(tokenRows?.length),
-    accountId: tokenRows?.[0]?.account_id || null,
-    scope: tokenRows?.[0]?.scope || null,
-    tokenCreatedAt: tokenRows?.[0]?.created_at || null,
-    tokenExpiresAt: tokenRows?.[0]?.expires_at || null,
   }
 }
 
@@ -74,10 +71,13 @@ export default async function handler(req, res) {
     return
   }
 
+  if (!requireBearerSecret(req, res, process.env.HEALTHLENS_SYNC_SECRET, 'HEALTHLENS_SYNC_SECRET')) return
+
   try {
     const status = await createStravaStatus({ days: req.query?.days || 90 })
     res.status(200).json(status)
   } catch (err) {
-    res.status(500).json({ connected: false, error: err.message })
+    console.error('Strava status failed:', err?.message || 'unknown error')
+    res.status(500).json({ connected: false, error: 'Unable to read Strava status' })
   }
 }
