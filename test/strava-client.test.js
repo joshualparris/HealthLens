@@ -215,10 +215,10 @@ test('Strava webhook rejects wrong verify token', async () => {
 })
 
 test('Strava webhook POST stores event without inline processing', async () => {
-  const fake = createFakeSupabase()
+  const fake = createFakeSupabase({ oauth_tokens: [{ provider: 'strava', account_id: '777' }] })
   const handler = createStravaWebhookHandler({
     supabaseClient: fake.client,
-    env: { STRAVA_VERIFY_TOKEN: 'verify-me', STRAVA_WEBHOOK_PROCESS_INLINE: 'false' },
+    env: { STRAVA_VERIFY_TOKEN: 'verify-me', STRAVA_SUBSCRIPTION_ID: '999', STRAVA_WEBHOOK_PROCESS_INLINE: 'false' },
   })
   const req = {
     method: 'POST',
@@ -244,14 +244,14 @@ test('Strava webhook POST stores event without inline processing', async () => {
 })
 
 test('Strava webhook delete event marks synced activity deleted', async () => {
-  const fake = createFakeSupabase()
+  const fake = createFakeSupabase({ oauth_tokens: [{ provider: 'strava', account_id: '777' }] })
   await upsertStravaActivityToSupabase(activity, null, {
     supabaseClient: fake.client,
     env: { DEFAULT_USER_ID: 'user-1' },
   })
   const handler = createStravaWebhookHandler({
     supabaseClient: fake.client,
-    env: { STRAVA_VERIFY_TOKEN: 'verify-me' },
+    env: { STRAVA_VERIFY_TOKEN: 'verify-me', STRAVA_SUBSCRIPTION_ID: '999' },
   })
   const req = {
     method: 'POST',
