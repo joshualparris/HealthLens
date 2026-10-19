@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test'
 test('private cloud health dashboard stays unavailable without a server session', async ({ page }) => {
   const privateRequests = []
   page.on('request', request => {
-    if (/\\.supabase\\.co\\/rest\\/v1\\/(daily_health_summary|health_sync_imports)/.test(request.url())) {
+    if (request.url().includes('.supabase.co/rest/v1/') && (request.url().includes('daily_health_summary') || request.url().includes('health_sync_imports'))) {
       privateRequests.push(request.url())
     }
   })
