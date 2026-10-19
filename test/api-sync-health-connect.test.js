@@ -144,7 +144,7 @@ test('sync endpoint rejects wrong auth', async () => {
   const res = createResponse()
   await handler(req, res)
   assert.equal(res.statusCode, 403)
-  assert.equal(res.body.error, 'Invalid sync token')
+  assert.equal(res.body.error, 'Invalid credentials')
 })
 
 test('buildSummaryRow preserves zero values', () => {
