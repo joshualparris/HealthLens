@@ -128,7 +128,7 @@ test('admin self-test rejects wrong auth', async () => {
   const res = createResponse()
   await handler(req, res)
   assert.equal(res.statusCode, 403)
-  assert.equal(res.body.error, 'Invalid admin token')
+  assert.equal(res.body.error, 'Invalid credentials')
 })
 
 test('admin self-test service role unavailable reports false', async () => {
