@@ -18,3 +18,5 @@ Progress uses localStorage `gentle-motion-v1`; uploaded PDFs use IndexedDB `gent
 Private configured build: automated dose/hold/expiry/command tests passed. Desktop browser exercised all active rotation counts, real hold elapsed time, pause/reload/resume and manual completion. Android microphone, offline restart, notification delivery and install remain unverified. Illustrations are schematic movement cues; insufficiently specified techniques show a clarification message. This is not a clinically validated movement demonstrator.
 
 This source addition is isolated from the existing HealthLens Vite application and does not alter its build or deployment. Roll back by reverting the additive commit. Do not claim the entire app meets the Tier 3 release bar until backup/restore, multi-tab concurrency and device checks have been completed.
+
+Historical exercise programmes should remain clearly dated, and general educational material must not be presented as a current clinician prescription.
