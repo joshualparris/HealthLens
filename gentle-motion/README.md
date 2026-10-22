@@ -23,3 +23,6 @@ Historical exercise programmes should remain clearly dated, and general educatio
 
 ## Importing a dated exercise archive
 Use a JSON file with `version: 1`, a `programmes` array containing `name`, `date` (YYYY-MM-DD), `source`, `frequency`, `precaution`, `exercises` (`name`, `text`, optional `reps`, `hold`, `sides`, `each`, `ambiguous`, `visual`, `area`), and optional `advice` entries (`date`, `title`, `text`, `source`, `area`). The newest programme should be first. The importer validates ranges, keeps undosed exercises undosed, and stores the archive in this browser only. Follow a current clinician-approved plan; historical plans remain dated and separate. No imported health information is transmitted by the app.
+
+## Loading a dated email archive
+Open **Programmes → Import dated exercise programmes**, select a JSON file and confirm. The file should contain `version: 1`, `programmes` (each with a name, ISO date, source, optional dosage fields, and an exercises array), plus optional `advice` entries. Imported programmes are saved to browser storage. Dated records remain separate and advice has its own tab. Unknown doses are left unspecified; a new programme should not be assumed to supersede your physiotherapist's instructions.
