@@ -14,6 +14,7 @@ export default function Header({ onReset, connection, onDisconnect }) {
         </div>
 
         <div className="flex items-center gap-3">
+          <a href="/listen.html" aria-label="Listen to mouth ulcer podcasts" className="text-xs text-jade hover:text-white underline underline-offset-4 whitespace-nowrap">Listen</a>
           {connection && (
             <div className="flex items-center gap-3">
               <span className="text-xs text-slate-ui bg-ink border border-slate-border rounded-full px-3 py-1 font-mono">
