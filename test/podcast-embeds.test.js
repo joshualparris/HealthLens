@@ -37,3 +37,14 @@ test('public media route exempts only itself from cross-origin isolation', () =>
   assert.equal(global.headers.find(h => h.key === 'Cross-Origin-Embedder-Policy').value, 'require-corp')
   assert.equal(listen.headers.find(h => h.key === 'Cross-Origin-Embedder-Policy').value, 'unsafe-none')
 })
+
+test('publisher-hosted direct audio streams are present for all three episodes', () => {
+  const sources = [
+  "https://traffic.omny.fm/d/clips/d12fa6a5-bad6-4025-9d74-ac600024ef6b/98ece318-818d-44e5-8da2-ac6000259d49/baae3daa-a318-4b33-ae21-b0180009f752/audio.mp3",
+  "https://traffic.omny.fm/d/clips/d12fa6a5-bad6-4025-9d74-ac600024ef6b/98ece318-818d-44e5-8da2-ac6000259d49/e4c415e8-233b-4e89-a626-b01800128ba7/audio.mp3",
+  "https://cdn.vivarep.com/contrib/va/podcast/podcast_703_clark_navig_oral_ulcers_voco_shining3d_t_ek.20250519032956493.mp3"
+]
+  assert.equal((html.match(/<audio\b[^>]*controls/g) ?? []).length, 3)
+  for (const source of sources) assert.ok(html.includes(`<source src="${source}" type="audio/mpeg">`))
+  assert.equal((html.match(/<details class="publisher-player">/g) ?? []).length, 3)
+})

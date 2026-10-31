@@ -18,12 +18,18 @@ test('health educational podcast library works on desktop and mobile layouts', a
   await expect(page.getByRole('link', { name: 'Back to HealthLens' })).toHaveAttribute('href', '/')
 
   const players = page.locator('main iframe')
+  const audios = page.locator('main audio')
+  const publisherOptions = page.locator('main details.publisher-player')
+  await expect(audios).toHaveCount(3)
   await expect(players).toHaveCount(3)
   for (let i = 0; i < podcastTitles.length; i += 1) {
     await expect(page.getByRole('heading', { name: podcastTitles[i], exact: true })).toBeVisible()
     await expect(players.nth(i)).toHaveAttribute('title', `Play ${podcastTitles[i]}`)
     await expect(players.nth(i)).toHaveAttribute('src', officialPlayers[i])
     await expect(players.nth(i)).toHaveAttribute('allow', /autoplay/)
+    await expect(audios.nth(i)).toHaveAttribute('aria-label', `Listen to ${podcastTitles[i]}`)
+    await expect(audios.nth(i)).toBeVisible()
+    await publisherOptions.nth(i).locator('summary').click()
     await players.nth(i).scrollIntoViewIfNeeded()
     await expect(players.nth(i)).toBeVisible()
   }
