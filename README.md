@@ -23,6 +23,18 @@ Keep the boundary clear: reviewed public health education belongs in Health Refe
 - **Strava exercise sync** via OAuth, webhook event storage, and optional activity backfill
 - **API key stored locally** — never leaves your browser
 
+## Longitudinal trends (private-by-design)
+
+Visit [Longitudinal Trends](https://health-lens-rust.vercel.app/longitudinal.html) to explore 14, 30 and 60-day trends in steps, sleep, HRV, resting/sleeping heart rate, respiratory rate and logged exercise. The viewer accepts a local `healthlens-longitudinal-v1` JSON with a `days` array of daily metric objects (ISO local `date` and numeric fields). Example:
+
+```json
+{"schema":"healthlens-longitudinal-v1","days":[{"date":"2026-01-01","steps":1234,"sleep_h":7.2,"rhr":60,"hrv":40}]}
+```
+
+**Privacy:** the dashboard includes **no personal measurements** in the repository, and its restrictive Content Security Policy disables network connections. The selected daily-summary file is parsed in the browser tab only. Do not commit or publish raw Health Connect exports, private summary JSON, medical records, or personally identifiable readings. A private offline report can include personal readings without posting them to the public deployment.
+
+Run `npm run test:browser` to check synthetic import, viewport behaviour and clearing of local data.
+
 ## One-command automation check
 
 Run the HealthLens doctor whenever you want AI to check the boring plumbing:
