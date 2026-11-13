@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Longitudinal trends | HealthLens</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1420;--surface:#152234;--border:#2a3e55;--text:#edf3fa;--muted:#a6b8ce;--jade:#65d8b4;--blue:#91b5ff;--gold:#f4c77e;--rose:#f4a0a0}
+*{box-sizing:border-box}body{background:var(--bg);color:var(--text);font:16px/1.55 system-ui,Segoe UI,sans-serif;margin:0}main{max-width:1180px;margin:0 auto;padding:24px 18px 72px}a{color:var(--blue)}h1{font-size:clamp(1.7rem,4vw,2.65rem);line-height:1.15;margin:16px 0}h2{font-size:1.35rem;margin:32px 0 12px}p{color:var(--muted)}.tiny{font-size:.81rem;color:var(--muted)}.intro{max-width:780px}.upload{display:block;border:2px dashed #4b6987;background:#15263a;padding:26px;border-radius:17px;margin:25px 0;cursor:pointer}.upload:focus-within{border-color:var(--jade)}input[type=file]{display:block;max-width:100%;margin-top:12px;font-size:1rem}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.actions button{background:#20344c;border:1px solid #567391;border-radius:9px;color:var(--text);padding:10px 16px;cursor:pointer;font-weight:600}.actions button[aria-pressed=true]{background:#25604f;border-color:var(--jade)}.actions button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:3px}.kpis,.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.kpi,.plot,.notice{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}.kpi span{display:block;color:var(--muted);font-size:.86rem}.kpi strong{display:block;color:var(--jade);font-size:2rem;font-variant-numeric:tabular-nums}.kpi em{display:block;font-size:.86rem;color:var(--muted);font-style:normal}.plot{min-width:0}.plot h3{margin:0 0 9px;font-size:1rem}.plot svg{width:100%;height:auto;display:block;overflow:visible}.plot .sub{font-size:.8rem;margin:8px 0 0;color:var(--muted)}.notice{margin:22px 0;border-left:4px solid var(--gold)}.notice strong{color:var(--gold)}.status{min-height:1.2rem;margin:10px 0}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{text-align:left;border-bottom:1px solid var(--border);padding:10px 8px}th{color:var(--muted)}.scroller{overflow-x:auto}.hidden{display:none}.pill{border:1px solid var(--border);border-radius:20px;padding:4px 11px;font-size:.85rem;color:var(--muted)}@media(max-width:750px){.kpis,.charts{grid-template-columns:1fr}main{padding:16px 12px}.kpi strong{font-size:1.75rem}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<main>
+<a href="/">← HealthLens home</a>
+<h1>Longitudinal health trends</h1>
+<p class="intro">Explore sleep, steps, heart rate, HRV, respiratory rate and exercise across 14, 30 or 60 days. All analysis runs in this browser tab. This page does not upload or transmit your readings.</p>
+<label class="upload"><strong>Open your private HealthLens metrics JSON</strong><br><span class="tiny">Accepts a HealthLens 60-day report data file. No account, provider key or internet request needed.</span><input id="file" type="file" accept=".json,application/json" aria-describedby="status"></label>
+<div class="status" role="status" id="status">Choose a private JSON file to show your charts.</div>
+<section id="view" class="hidden">
+<div class="actions"><span class="pill" id="period"></span><button type="button" data-days="14" aria-pressed="false">14 days</button><button type="button" data-days="30" aria-pressed="false">30 days</button><button type="button" data-days="60" aria-pressed="true">60 days</button><button type="button" id="clear">Clear data</button></div>
+<h2>Overview</h2>
+<div id="kpis" class="kpis"></div>
+<div class="notice"><strong>How to read these results</strong><p id="summary"></p><p id="limits" class="tiny"></p></div>
+<h2>Daily trends</h2>
+<div id="charts" class="charts"></div>
+<h2>Data coverage</h2><div class="scroller"><table><thead><tr><th>Metric</th><th>Days recorded</th><th>Range</th></tr></thead><tbody id="coverage"></tbody></table></div>
+<p class="tiny">Methods: same-source wearable readings; no cross-app summing. Missing dates remain missing. This dashboard visualises previously validated daily summaries; it does not itself parse raw ZIP or SQLite exports. Wearables do not diagnose illness or cardiac rhythm.</p>
+</section>
+</main>
+<script>
+'use strict';
+(function(){
+ const $=id=>document.getElementById(id);
+ const NS='http://www.w3.org/2000/svg';
+ let original=null, selected=60;
+ const specs=[
+  {key:'sleep_h',title:'Estimated sleep',unit:'hours',color:'#65d8b4',low:7},
+  {key:'steps',title:'Daily steps',unit:'steps',color:'#91b5ff',bar:true},
+  {key:'rhr',title:'Resting heart rate',unit:'bpm',color:'#f4c77e'},
+  {key:'sleeping_hr_mean',title:'Average sleeping heart rate',unit:'bpm',color:'#91b5ff'},
+  {key:'hrv',title:'HRV / RMSSD',unit:'ms',color:'#be9cf5'},
+  {key:'sleep_efficiency',title:'Estimated sleep efficiency',unit:'%',color:'#65d8b4'},
+  {key:'rr',title:'Respiratory rate',unit:'breaths/min',color:'#91b5ff'},
+  {key:'exercise_min',title:'Logged exercise',unit:'minutes',color:'#f4c77e',bar:true}
+ ];
+ function n(v){return typeof v==='number' && Number.isFinite(v)?v:null}
+ function mean(vals){const x=vals.filter(x=>x!==null);return x.length?x.reduce((a,b)=>a+b,0)/x.length:null}
+ function fmt(v,d=1){return v===null?'No data':v.toLocaleString('en-AU',{minimumFractionDigits:d,maximumFractionDigits:d})}
+ function svgEl(name,props){const e=document.createElementNS(NS,name);Object.entries(props||{}).forEach(([k,v])=>e.setAttribute(k,String(v)));return e}
+ function node(name,text,cls){const e=document.createElement(name);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e}
+ function graphic(rows,spec){
+  const w=525,h=230,l=44,r=12,t=18,b=33,W=w-l-r,H=h-t-b;
+  const series=rows.map(d=>n(d[spec.key])),values=series.filter(v=>v!==null);
+  const svg=svgEl('svg',{viewBox:'0 0 '+w+' '+h,role:'img','aria-label':spec.title+' for '+rows.length+' calendar days'});
+  if(!values.length){const txt=svgEl('text',{x:40,y:110,fill:'#a6b8ce'});txt.textContent='No recorded data';svg.append(txt);return svg;}
+  let min=Math.min(...values),max=Math.max(...values);
+  if(spec.bar){min=0;max=Math.max(1,max*1.08)} else {let span=max-min;if(span<2)span=2;min-=span*.17;max+=span*.17}
+  const sy=v=>t+H-(v-min)/(max-min)*H;
+  for(let i=0;i<=4;i++){
+   const y=t+i*H/4;
+   svg.append(svgEl('line',{x1:l,y1:y,x2:w-r,y2:y,stroke:'#293b4f','stroke-width':1}));
+   const label=svgEl('text',{x:l-7,y:y+3,fill:'#a6b8ce','font-size':11,'text-anchor':'end'});
+   label.textContent=fmt(max-(max-min)*i/4,0);svg.append(label);
+  }
+  const datePos=[0,Math.floor((rows.length-1)/2),rows.length-1];
+  datePos.forEach(i=>{const lab=svgEl('text',{x:l+i*W/Math.max(1,rows.length-1),y:h-8,fill:'#a6b8ce','font-size':11,'text-anchor':i===0?'start':i===rows.length-1?'end':'middle'});lab.textContent=rows[i].date.slice(5);svg.append(lab)});
+  if(spec.low!==undefined && spec.low>min && spec.low<max){
+   const y=sy(spec.low);svg.append(svgEl('line',{x1:l,y1:y,x2:w-r,y2:y,stroke:'#dfb26d','stroke-dasharray':'4 5','stroke-width':1.5}));
+  }
+  if(spec.bar) {
+    series.forEach((v,i)=>{if(v===null)return;const bw=Math.max(2,W/rows.length-2),x=l+i*W/rows.length+1,y=sy(v);
+      const shape=svgEl('rect',{x,y,width:bw,height:Math.max(1,sy(0)-y),fill:spec.color,opacity:.88});
+      const title=svgEl('title');title.textContent=rows[i].date+': '+fmt(v,1)+' '+spec.unit;shape.append(title);svg.append(shape);
+    });
+  }else{
+    let chunk=[];
+    function draw(){if(chunk.length<2){chunk=[];return}const path=svgEl('polyline',{points:chunk.join(' '),fill:'none',stroke:spec.color,'stroke-width':2.6,'stroke-linejoin':'round','stroke-linecap':'round'});svg.append(path);chunk=[]}
+    series.forEach((v,i)=>{if(v===null){draw();return}const x=l+i*W/Math.max(1,rows.length-1),y=sy(v);chunk.push(x+','+y);
+      const dot=svgEl('circle',{cx:x,cy:y,r:2.5,fill:spec.color});const title=svgEl('title');title.textContent=rows[i].date+': '+fmt(v,2)+' '+spec.unit;dot.append(title);svg.append(dot)
+    });draw();
+  }
+  return svg;
+ }
+ function render(){
+  if(!original)return;
+  const days=original.days.slice(-selected);
+  $('period').textContent=days[0].date+' – '+days[days.length-1].date;
+  $('view').classList.remove('hidden');
+  const current=days.slice(-30), prior=days.slice(-60,-30);
+  $('kpis').replaceChildren();
+  for(const spec of specs.slice(0,5)){
+   const v=mean(days.map(d=>n(d[spec.key])));
+   const before=mean(prior.map(d=>n(d[spec.key]))),after=mean(current.map(d=>n(d[spec.key])));
+   const card=node('article',undefined,'kpi');card.append(node('span',spec.title),node('strong',fmt(v,spec.bar?0:1)+(spec.key==='steps'?' / day':' '+spec.unit)));
+   const meta=node('em',days.filter(d=>n(d[spec.key])!==null).length+'/'+days.length+' days available');
+   if(selected===60&&before!==null&&after!==null){meta.textContent+=' · latest 30 vs previous 30: '+(after-before>=0?'+':'')+fmt(after-before,1)}
+   card.append(meta);$('kpis').append(card);
+  }
+  const short=days.filter(d=>n(d.sleep_h)!==null&&d.sleep_h<7).length;
+  $('summary').textContent='Across the selected '+days.length+' days, '+short+' measured nights were under 7 hours. Resting heart rate, HRV and sleep are useful together, but no individual reading proves good or poor recovery.';
+  const summary=original.summary||{},caveats=summary.caveats||[];
+  $('limits').textContent=caveats.join(' · ')||'Check source completeness and device measurement methods before interpreting trends.';
+  $('charts').replaceChildren();
+  specs.forEach(spec=>{const item=node('article',undefined,'plot');item.append(node('h3',spec.title),graphic(days,spec),node('p',spec.unit+' · hover/tap a point for its date and value','sub'));$('charts').append(item)});
+  $('coverage').replaceChildren();
+  specs.forEach(spec=>{const vals=days.map(d=>n(d[spec.key])).filter(x=>x!==null);const tr=node('tr');[spec.title,vals.length+'/'+days.length,vals.length?fmt(Math.min(...vals),1)+' – '+fmt(Math.max(...vals),1):'Unavailable'].forEach(v=>tr.append(node('td',v)));$('coverage').append(tr)});
+  document.querySelectorAll('[data-days]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.days)===selected)));
+ }
+ $('file').addEventListener('change',async e=>{
+  const file=e.target.files&&e.target.files[0];if(!file)return;
+  if(file.size>5000000){$('status').textContent='File is too large for this daily-summary viewer (max 5 MB).';return}
+  try{
+   const report=JSON.parse(await file.text());
+   if(report.schema!=='healthlens-longitudinal-v1'||!Array.isArray(report.days)||!report.days.length||report.days.length>366)throw Error('Not a HealthLens longitudinal daily-summary JSON file.');
+   if(report.days.some(d=>typeof d.date!=='string'||!(/^\d{4}-\d{2}-\d{2}$/).test(d.date)))throw Error('Invalid or missing day labels.');
+   report.days.sort((a,b)=>a.date.localeCompare(b.date));
+   original=report;
+   $('status').textContent='Loaded '+report.days.length+' days locally. Nothing was sent anywhere.';
+   render();
+  }catch(err){original=null;$('view').classList.add('hidden');$('status').textContent='Could not read this file: '+String(err.message||err)}
+ });
+ document.querySelectorAll('[data-days]').forEach(b=>b.addEventListener('click',()=>{selected=Number(b.dataset.days);render()}));
+ $('clear').addEventListener('click',()=>{original=null;$('file').value='';$('view').classList.add('hidden');$('status').textContent='Data cleared from this tab. No server storage was used.'});
+})();
+</script>
+</body></html>
