@@ -25,7 +25,7 @@ Keep the boundary clear: reviewed public health education belongs in Health Refe
 
 ## Longitudinal trends (private-by-design)
 
-Visit [Longitudinal Trends](https://health-lens-rust.vercel.app/longitudinal.html) to explore 14, 30 and 60-day trends in steps, sleep, HRV, resting/sleeping heart rate, respiratory rate and logged exercise. The viewer accepts a local `healthlens-longitudinal-v1` JSON with a `days` array of daily metric objects (ISO local `date` and numeric fields). Example:
+Visit the [login-free, local-only Longitudinal Trends viewer](https://healthlens-longitudinal-viewer.parris-neathaustralia.workers.dev/) (mirrors [`public/longitudinal.html`](public/longitudinal.html)) to explore 14, 30 and 60-day trends in steps, sleep, HRV, resting/sleeping heart rate, respiratory rate and logged exercise. The viewer accepts a local `healthlens-longitudinal-v1` JSON with a `days` array of daily metric objects (ISO local `date` and numeric fields). Example:
 
 ```json
 {"schema":"healthlens-longitudinal-v1","days":[{"date":"2026-01-01","steps":1234,"sleep_h":7.2,"rhr":60,"hrv":40}]}
