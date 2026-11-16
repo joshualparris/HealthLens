@@ -1,0 +1,83 @@
+name: AutoPatch unattended safe npm repairs
+on:
+  schedule:
+    # Runs daily in GitHub Actions, independently of ChatGPT.
+    - cron: '35 18 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only evaluate candidate PRs; do not merge'
+        type: boolean
+        required: true
+        default: true
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/autopatch-autonomous.yml'
+      - '.github/scripts/autopatch_autonomous.py'
+      - '.github/scripts/test_autopatch_autonomous.py'
+  pull_request:
+    paths:
+      - '.github/workflows/autopatch-autonomous.yml'
+      - '.github/scripts/autopatch_autonomous.py'
+      - '.github/scripts/test_autopatch_autonomous.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autopatch-self-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  safety-tests:
+    name: AutoPatch safety regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s .github/scripts -p 'test_autopatch_autonomous.py' -v
+
+  unattended-repair:
+    name: Independently scan and merge only verified patch updates
+    needs: safety-tests
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch vulnerability scanner before reading private lockfiles
+        run: docker pull ghcr.io/google/osv-scanner@sha256:a70ffffc2bfd33482953e5d6b64c6fcdb30239717a07b0f0d3ab2859ce3e4cde
+      - name: Evaluate PRs and merge only exact verified PATCH bumps
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_DRY_RUN: ${{ inputs.dry_run }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == push ]] || [[ "$EVENT_NAME" == workflow_dispatch && "$REQUEST_DRY_RUN" == true ]]; then
+            python .github/scripts/autopatch_autonomous.py --required-check build --dry-run
+          else
+            python .github/scripts/autopatch_autonomous.py --required-check build
+          fi
+      - name: Explain unattended source-only scope
+        if: always()
+        run: |
+          echo 'AutoPatch scans only verified Dependabot semver PATCH PRs in this repo.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Unverified upgrades never merge; resulting production deployment is independently unverified.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'GITHUB_TOKEN merges may not trigger new GitHub Actions workflows.' >> "$GITHUB_STEP_SUMMARY"
