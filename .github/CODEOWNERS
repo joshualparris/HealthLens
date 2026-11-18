@@ -1,0 +1,10 @@
+# Sensitive paths requiring owner oversight once GitHub branch protection
+# is configured to require code owner approval.
+# Package manifests are handled by CI diff checks to permit safe patch-only updates.
+/.github/ @joshualparris
+/api/ @joshualparris
+/scripts/ @joshualparris
+/supabase/ @joshualparris
+/vercel.json @joshualparris
+/renovate.json @joshualparris
+/.env.example @joshualparris
