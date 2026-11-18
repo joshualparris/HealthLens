@@ -1,0 +1,51 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Conservative opt-in pilot for Vite build tooling only. Existing Dependabot and AutoPatch retain other packages.",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "enabledManagers": [
+    "npm"
+  ],
+  "automerge": false,
+  "prConcurrentLimit": 2,
+  "prHourlyLimit": 1,
+  "vulnerabilityAlerts": {
+    "enabled": false
+  },
+  "lockFileMaintenance": {
+    "enabled": false
+  },
+  "ignoreDeps": [
+    "@playwright/test",
+    "@supabase/supabase-js",
+    "autoprefixer",
+    "dexie",
+    "jszip",
+    "pdfjs-dist",
+    "postcss",
+    "react",
+    "react-dom",
+    "react-dropzone",
+    "react-markdown",
+    "recharts",
+    "remark-gfm",
+    "sql.js",
+    "tailwindcss"
+  ],
+  "packageRules": [
+    {
+      "description": "Review Vite toolchain upgrades, including breaking changes, before merge",
+      "matchPackageNames": [
+        "vite",
+        "@vitejs/plugin-react"
+      ],
+      "labels": [
+        "renovate-pilot",
+        "needs-human"
+      ],
+      "automerge": false
+    }
+  ]
+}
