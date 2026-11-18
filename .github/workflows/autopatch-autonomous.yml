@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Only evaluate candidate PRs; do not merge'
+        description: 'Report only; merges always disabled'
         type: boolean
         required: true
         default: true
@@ -47,37 +47,34 @@ jobs:
       - run: python -m unittest discover -s .github/scripts -p 'test_autopatch_autonomous.py' -v
 
   unattended-repair:
-    name: Independently scan and merge only verified patch updates
+    name: Report-only verification of patch candidates
     needs: safety-tests
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      pull-requests: read
       checks: read
       statuses: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Fetch vulnerability scanner before reading private lockfiles
         run: docker pull ghcr.io/google/osv-scanner@sha256:a70ffffc2bfd33482953e5d6b64c6fcdb30239717a07b0f0d3ab2859ce3e4cde
-      - name: Evaluate PRs and merge only exact verified PATCH bumps
+      - name: Evaluate PATCH candidates without merging
         env:
           GH_TOKEN: ${{ github.token }}
           REQUEST_DRY_RUN: ${{ inputs.dry_run }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [[ "$EVENT_NAME" == push ]] || [[ "$EVENT_NAME" == workflow_dispatch && "$REQUEST_DRY_RUN" == true ]]; then
-            python .github/scripts/autopatch_autonomous.py --required-check build --dry-run
-          else
-            python .github/scripts/autopatch_autonomous.py --required-check build
-          fi
+          # Report-only until independent deployment and rollback verification is proven.
+          python .github/scripts/autopatch_autonomous.py --required-check build --dry-run
       - name: Explain unattended source-only scope
         if: always()
         run: |
