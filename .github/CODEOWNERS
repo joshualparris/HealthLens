@@ -1,0 +1,10 @@
+# Sensitive paths requiring owner oversight once GitHub branch protection
+# is configured to require code owner approval.
+# CODEOWNERS cannot distinguish package.json scripts from dependency bumps.\n# Keep package.json PRs manually reviewed until a trusted diff check exists.
+/.github/ @joshualparris
+/api/ @joshualparris
+/scripts/ @joshualparris
+/supabase/ @joshualparris
+/vercel.json @joshualparris
+/renovate.json @joshualparris
+/.env.example @joshualparris
