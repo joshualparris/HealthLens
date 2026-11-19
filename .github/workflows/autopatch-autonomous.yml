@@ -10,9 +10,6 @@ on:
         type: boolean
         required: true
         default: true
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
   push:
     branches: [main]
     paths:
@@ -49,7 +46,7 @@ jobs:
   unattended-repair:
     name: Report-only verification of patch candidates
     needs: safety-tests
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
